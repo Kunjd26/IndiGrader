@@ -7,6 +7,8 @@ import subprocess
 import tempfile
 import time
 import difflib
+import resource
+
 
 # Standardized Flags
 # CFLAGS="-Wall"
@@ -55,6 +57,7 @@ def parse_arguments():
 	parser.add_argument("--save_output_dir", default="", help="Directory to save execution stdout files")
 	return parser.parse_args()
 
+
 def load_config(config_file, question):
 
 	# if [ ! -f "$CONFIG_FILE" ]; then
@@ -97,33 +100,42 @@ def diff_files(actual_path, expected_path):
 	# TODO This MUST be changed for exact grading equivalence.
 	# This only:
 
-    #     removes leading whitespace
-    #     removes trailing whitespace
-    #     removes completely blank lines
+	#     removes leading whitespace
+	#     removes trailing whitespace
+	#     removes completely blank lines
 
-    # It does NOT:
+	# It does NOT:
 
-    #     ignore case
-    #     ignore internal whitespace
+	#     ignore case
+	#     ignore internal whitespace
 
 	try:
 		with open(actual_path, 'r', encoding='utf-8', errors='ignore') as f1, \
 			 open(expected_path, 'r', encoding='utf-8', errors='ignore') as f2:
+			
 			lines1 = [line.strip() for line in f1 if line.strip()]
 			lines2 = [line.strip() for line in f2 if line.strip()]
+			
 			return lines1 == lines2
 	except Exception:
 		return False
+
 
 def print_diff_snippet(actual_path, expected_path):
 	"""Fallback cross-platform unified diff snippet generator."""
 	try:
 		with open(expected_path, 'r', encoding='utf-8', errors='ignore') as f2, \
 			 open(actual_path, 'r', encoding='utf-8', errors='ignore') as f1:
+			
+
 			diff = difflib.unified_diff(
-				f2.readlines(), f1.readlines(), 
-				fromfile='Expected', tofile='Actual', n=3
+				f2.readlines(), 
+				f1.readlines(), 
+				fromfile='Expected',
+				tofile='Actual',
+				n=3
 			)
+
 			for i, line in enumerate(diff):
 				if i >= 15:
 					break
@@ -131,19 +143,34 @@ def print_diff_snippet(actual_path, expected_path):
 	except Exception as e:
 		print(f"[LOG] Could not generate diff: {e}")
 
-def run_standard(executable, input_item, expected_output, sandbox_dir, test_name, ext, timeout_sec, memory_cap_mb, sandbox_flag, testcases_dir, question):
+
+
+
+def run_standard(
+	executable,
+	input_item,
+	expected_output,
+	sandbox_dir,
+	test_name,
+	ext,
+	timeout_sec,
+	memory_cap_mb,
+	sandbox_flag,
+	testcases_dir,
+	question
+):
 	expected_output = os.path.abspath(expected_output)
 	os.makedirs(sandbox_dir, exist_ok=True)
 	actual_output = os.path.join(sandbox_dir, "stdout.txt")
 	stderr_output = os.path.join(sandbox_dir, "stderr.txt")
 
 
-    # TODO Problamatic Python copytree() copy hidden files.
+	# TODO Problamatic Python copytree() copy hidden files.
 	
 	# Global Static Injection
 	# if [ -d "$TESTCASES_DIR/$QUESTION/static" ]; then
-    #     cp -r "$TESTCASES_DIR/$QUESTION/static/"* "$sandbox_dir/" 2>/dev/null || true
-    # fi
+	#     cp -r "$TESTCASES_DIR/$QUESTION/static/"* "$sandbox_dir/" 2>/dev/null || true
+	# fi
 	q_static_dir = os.path.join(testcases_dir, question, "static")
 	if os.path.isdir(q_static_dir):
 		for item in os.listdir(q_static_dir):
@@ -155,23 +182,23 @@ def run_standard(executable, input_item, expected_output, sandbox_dir, test_name
 				shutil.copy2(s, d)
 
 
-    # TODO Problamatic Python copytree() copy hidden files.
+	# TODO Problamatic Python copytree() copy hidden files.
 
 	# local stdin_file="/dev/null"
-    # local args_file="/dev/null"
+	# local args_file="/dev/null"
 	stdin_file = None
 	args_file = None
 
-    # if [ -d "$input_item" ]; then
+	# if [ -d "$input_item" ]; then
 	if os.path.isdir(input_item):
 		# Directory Mode (Hybrid)
 		# cp -r "$input_item/"* "$sandbox_dir/" 2>/dev/null || true
-        # if [ -f "$sandbox_dir/stdin.txt" ]; then
-        #     stdin_file="$sandbox_dir/stdin.txt"
-        # fi
-        # if [ -f "$sandbox_dir/args.txt" ]; then
-        #     args_file="$sandbox_dir/args.txt"
-        # fi
+		# if [ -f "$sandbox_dir/stdin.txt" ]; then
+		#     stdin_file="$sandbox_dir/stdin.txt"
+		# fi
+		# if [ -f "$sandbox_dir/args.txt" ]; then
+		#     args_file="$sandbox_dir/args.txt"
+		# fi
 		for item in os.listdir(input_item):
 			s = os.path.join(input_item, item)
 			d = os.path.join(sandbox_dir, item)
@@ -189,31 +216,31 @@ def run_standard(executable, input_item, expected_output, sandbox_dir, test_name
 			args_file = potential_args
 
 	# elif [[ "$input_item" == *args*.txt ]]; then
-    #     # Arg-only Mode
-    #     if [[ ! "$input_item" == /* ]]; then
-    #         args_file="$PWD/$input_item"
-    #     else
-    #         args_file="$input_item"
-    #     fi	
+	#     # Arg-only Mode
+	#     if [[ ! "$input_item" == /* ]]; then
+	#         args_file="$PWD/$input_item"
+	#     else
+	#         args_file="$input_item"
+	#     fi	
 	elif "args" in os.path.basename(input_item) and input_item.endswith(".txt"):
 		# Arg-only Mode
 		args_file = os.path.abspath(input_item)
 
 	# else
-    #     # Stdin-only Mode
-    #     if [[ ! "$input_item" == /* ]]; then
-    #         stdin_file="$PWD/$input_item"
-    #     else
-    #         stdin_file="$input_item"
-    #     fi
-    # fi
+	#     # Stdin-only Mode
+	#     if [[ ! "$input_item" == /* ]]; then
+	#         stdin_file="$PWD/$input_item"
+	#     else
+	#         stdin_file="$input_item"
+	#     fi
+	# fi
 	else:
 		# Stdin-only Mode
 		stdin_file = os.path.abspath(input_item)
 
 	# Copy executable/source to sandbox_dir
 	# local local_exec=$(basename "$EXECUTABLE")
-    # cp -r "$EXECUTABLE" "$sandbox_dir/"
+	# cp -r "$EXECUTABLE" "$sandbox_dir/"
 	local_exec = os.path.basename(executable)
 	dest_exec = os.path.join(sandbox_dir, local_exec)
 	if os.path.isdir(executable):
@@ -222,28 +249,28 @@ def run_standard(executable, input_item, expected_output, sandbox_dir, test_name
 		shutil.copy2(executable, dest_exec)
 
 	# Command array construction
-    # local CMD=()
+	# local CMD=()
 	cmd = []
 
-    
-    # TODO Problamatic If Firejail isn't installed.Python Simply doesn't use Firejail.
-    # Requesting sandboxing and silently running unsandboxed is not ideal.
+	
+	# TODO Problamatic If Firejail isn't installed.Python Simply doesn't use Firejail.
+	# Requesting sandboxing and silently running unsandboxed is not ideal.
 	
 	# Firejail is Linux specific; skipped on Windows/Mac dynamically
 	# if [ "$SANDBOX" = true ]; then
-    #     CMD=("firejail" "--quiet" "--noprofile" "--private=.")
-    # fi
+	#     CMD=("firejail" "--quiet" "--noprofile" "--private=.")
+	# fi
 	if sandbox_flag and os.name == 'posix' and shutil.which("firejail"):
 		cmd += ["firejail", "--quiet", "--noprofile", "--private=."]
 
 
 	# if [[ "$EXT" == ".py" ]]; then
-    #     CMD+=("python3" "./$local_exec")
-    # elif [[ "$EXT" == ".awk" ]]; then
-    #     CMD+=("awk" "-f" "./$local_exec")
-    # else
-    #     CMD+=("./$local_exec")
-    # fi
+	#     CMD+=("python3" "./$local_exec")
+	# elif [[ "$EXT" == ".awk" ]]; then
+	#     CMD+=("awk" "-f" "./$local_exec")
+	# else
+	#     CMD+=("./$local_exec")
+	# fi
 	if ext == ".py":
 		cmd += ["python3" if os.name != 'nt' else "python", f"./{local_exec}"]
 	elif ext == ".awk":
@@ -255,10 +282,10 @@ def run_standard(executable, input_item, expected_output, sandbox_dir, test_name
 			cmd += [f"./{local_exec}"]
 
 	# Load args
-    # local EXTRA_ARGS=()
-    # if [ -f "$args_file" ]; then
-    #     EXTRA_ARGS=($(cat "$args_file"))
-    # fi
+	# local EXTRA_ARGS=()
+	# if [ -f "$args_file" ]; then
+	#     EXTRA_ARGS=($(cat "$args_file"))
+	# fi
 	extra_args = []
 	if args_file and os.path.isfile(args_file):
 		try:
@@ -277,19 +304,19 @@ def run_standard(executable, input_item, expected_output, sandbox_dir, test_name
 	orig_cwd = os.getcwd()
 	os.chdir(sandbox_dir)
 
-	start_time = time.time()
+	start_time = time.perf_counter()
 	exit_code = 0
 	timeout_occurred = False
 
 
-    # TODO Problamatic The Python implementation should inspect the current limit and 
-    #                   safely reduce it rather than blindly trying to increase the hard limit.
+	# TODO Problamatic The Python implementation should inspect the current limit and 
+	#                   safely reduce it rather than blindly trying to increase the hard limit.
 
 	# Unix-only memory capping configuration
 	def set_limits():
 		if os.name == 'posix':
-			import resource
 			try:
+
 				resource.setrlimit(resource.RLIMIT_AS, (memory_cap_mb * 1024 * 1024, resource.RLIMIT_INFINITY))
 			except Exception:
 				pass
@@ -305,8 +332,8 @@ def run_standard(executable, input_item, expected_output, sandbox_dir, test_name
 		)
 		exit_code = proc.returncode
 
-    # TODO produce TIMEOUT process-tree behavior can differ.
-    
+	# TODO produce TIMEOUT process-tree behavior can differ.
+	
 	except subprocess.TimeoutExpired:
 		timeout_occurred = True
 	except Exception as e:
@@ -321,23 +348,23 @@ def run_standard(executable, input_item, expected_output, sandbox_dir, test_name
 		os.chdir(orig_cwd)
 
 
-    # TODO if /usr/bin/time isn't present, the shell leaves the execution time blank.
-    # Python always generates a time.
+	# TODO if /usr/bin/time isn't present, the shell leaves the execution time blank.
+	# Python always generates a time.
 
-	exec_time = round(time.time() - start_time, 2)
+	exec_time = time.perf_counter() - start_time
 
 
 	# if [ $exit_code -eq 124 ]; then
-    #     echo "[VERDICT] $test_name: TIMEOUT (${exec_time}s)"
-    #     return 2
-    # elif [ $exit_code -ne 0 ]; then
-    #     echo "[VERDICT] $test_name: RUNTIME_ERROR (${exec_time}s)"
-    #     echo "[LOG] Exit code $exit_code. Stderr:"
-    #     cat "$sandbox_dir/stderr.txt" | while read -r line; do echo "[LOG] $line"; done
-    #     return 3
-    # fi
+	#     echo "[VERDICT] $test_name: TIMEOUT (${exec_time}s)"
+	#     return 2
+	# elif [ $exit_code -ne 0 ]; then
+	#     echo "[VERDICT] $test_name: RUNTIME_ERROR (${exec_time}s)"
+	#     echo "[LOG] Exit code $exit_code. Stderr:"
+	#     cat "$sandbox_dir/stderr.txt" | while read -r line; do echo "[LOG] $line"; done
+	#     return 3
+	# fi
 	if timeout_occurred:
-		print(f"[VERDICT] {test_name}: TIMEOUT ({exec_time}s)")
+		print(f"[VERDICT] {test_name}: TIMEOUT ({exec_time:.6f}s)")
 		return 2
 	elif exit_code != 0:
 		print(f"[VERDICT] {test_name}: RUNTIME_ERROR ({exec_time}s)")
@@ -350,18 +377,18 @@ def run_standard(executable, input_item, expected_output, sandbox_dir, test_name
 
 	# Diffing logic
 	# if diff $DIFF_FLAGS "$actual_output" "$expected_output" > /dev/null 2>&1; then
-    #     echo "[VERDICT] $test_name: PASSED (${exec_time}s)"
-    #     return 0
+	#     echo "[VERDICT] $test_name: PASSED (${exec_time}s)"
+	#     return 0
 	if diff_files(actual_output, expected_output):
 		print(f"[VERDICT] {test_name}: PASSED ({exec_time}s)")
 		return 0
 
 	# else
-    #     echo "[VERDICT] $test_name: WRONG_ANSWER (${exec_time}s)"
-    #     echo "[LOG] Diff snippet (Expected vs Actual):"
-    #     diff -u --color=always "$expected_output" "$actual_output" | head -n 15 | while read -r line; do echo "[LOG] $line"; done
-    #     return 1
-    # fi
+	#     echo "[VERDICT] $test_name: WRONG_ANSWER (${exec_time}s)"
+	#     echo "[LOG] Diff snippet (Expected vs Actual):"
+	#     diff -u --color=always "$expected_output" "$actual_output" | head -n 15 | while read -r line; do echo "[LOG] $line"; done
+	#     return 1
+	# fi
 	else:
 		print(f"[VERDICT] {test_name}: WRONG_ANSWER ({exec_time}s)")
 		print("[LOG] Diff snippet (Expected vs Actual):")
@@ -370,7 +397,10 @@ def run_standard(executable, input_item, expected_output, sandbox_dir, test_name
 
 def main():
 	args = parse_arguments()
-	evaluator, timeout_sec, memory_cap_mb, makefile_mode, exec_name = load_config(args.config, args.question)
+	evaluator, timeout_sec, memory_cap_mb, makefile_mode, exec_name = load_config(
+		args.config, 
+		args.question
+		)
 
 	# Detect extension
 	# FILENAME=$(basename "$SUBMISSION")
@@ -408,7 +438,7 @@ def main():
 				sys.exit(1)
 
 
-            # TODO Problamatic Python copytree() copy hidden files.
+			# TODO Problamatic Python copytree() copy hidden files.
 			
 			# echo "[LOG] Compiling via Makefile in temporary sandbox..."
 			# cp -r "$SUBMISSION"/* "$BUILD_DIR/"
@@ -438,12 +468,18 @@ def main():
 			for cmd in make_cmd:
 				if shutil.which(cmd):
 					with open(compile_log, "w") as log_f:
-						res = subprocess.run([cmd], stdout=log_f, stderr=subprocess.STDOUT)
+						res = subprocess.run(
+							[cmd],
+						   stdout=log_f,
+						   stderr=subprocess.STDOUT
+						   )
 						success = (res.returncode == 0)
 					break
 			else:
 				with open(compile_log, "w") as log_f:
-					log_f.write("No 'make' engine tool found on this OS environment.")
+					log_f.write(
+						"No 'make' engine tool found on this OS environment."
+						)
 					success = False
 
 			# if ! make > "compile_log.txt" 2>&1; then
@@ -463,7 +499,7 @@ def main():
 				sys.exit(1)
 
 			# EXECUTABLE="${BUILD_DIR}/${EXEC_NAME}"
-    		# cd - >/dev/null
+			# cd - >/dev/null
 			
 			executable = os.path.join(build_dir, exec_name)
 			os.chdir(orig_dir)
@@ -472,13 +508,20 @@ def main():
 		# elif [[ "$EXT" == ".c" ]]; then
 		elif ext == ".c":
 			# EXECUTABLE="${BUILD_DIR}/exec"
-    		# echo "[LOG] Compiling C source..."
-			executable = os.path.join(build_dir, "exec" + (".exe" if os.name == 'nt' else ""))
+			# echo "[LOG] Compiling C source..."
+			executable = os.path.join(
+				build_dir,
+				"exec" + (".exe" if os.name == 'nt' else "")
+			)
 			print("[LOG] Compiling C source...")
 
 			compile_err = os.path.join(build_dir, "compile_err.txt")
+
 			with open(compile_err, "w") as err_f:
-				res = subprocess.run(["gcc"] + CFLAGS + [args.submission] + LDFLAGS + ["-o", executable], stderr=err_f)
+				res = subprocess.run(
+					["gcc"] + CFLAGS + [args.submission] + LDFLAGS + ["-o", executable], 
+					stderr=err_f
+				)
 
 			# if ! gcc $CFLAGS "$SUBMISSION" $LDFLAGS -o "$EXECUTABLE" 2> "${BUILD_DIR}/compile_err.txt"; then
 			# 	echo "[COMPILE_LOG] Compilation failed:"
@@ -498,13 +541,21 @@ def main():
 		elif ext == ".cpp":
 
 			# EXECUTABLE="${BUILD_DIR}/exec"
-    		# echo "[LOG] Compiling C++ source..."
-			executable = os.path.join(build_dir, "exec" + (".exe" if os.name == 'nt' else ""))
+			# echo "[LOG] Compiling C++ source..."
+			executable = os.path.join(
+				build_dir, 
+				"exec" + (".exe" if os.name == 'nt' else "")
+			)
+
 			print("[LOG] Compiling C++ source...")
 
 			compile_err = os.path.join(build_dir, "compile_err.txt")
+
 			with open(compile_err, "w") as err_f:
-				res = subprocess.run(["g++"] + CXXFLAGS + [args.submission] + LDFLAGS + ["-o", executable], stderr=err_f)
+				res = subprocess.run(
+					["g++"] + CXXFLAGS + [args.submission] + LDFLAGS + ["-o", executable], 
+					stderr=err_f
+				)
 
 			# if ! g++ $CXXFLAGS "$SUBMISSION" $LDFLAGS -o "$EXECUTABLE" 2> "${BUILD_DIR}/compile_err.txt"; then
 			# 	echo "[COMPILE_LOG] Compilation failed:"
@@ -554,20 +605,25 @@ def main():
 
 
 
-        # Python will attempt to grade Hidden file (eg; .input01) while shell won't.
+		# Python will attempt to grade Hidden file (eg; .input01) while shell won't.
 
-		input_items = sorted(os.listdir(q_input_dir))
+		input_items = sorted(
+			os.listdir(q_input_dir)
+		)
+
 		# for input_item in "$Q_INPUT_DIR"/*; do
 		# 	[ -e "$input_item" ] || continue
 		for item in input_items:
 
-            # TODO This means Python performs only one prefix removal.
+			# TODO This means Python performs only one prefix removal.
 
 			# test_case_name=$(basename "$input_item" | sed -e 's/^input//' -e 's/^args//')
 			input_item_path = os.path.join(q_input_dir, item)
 			test_case_name = item
+
 			if test_case_name.startswith("input"):
 				test_case_name = test_case_name[5:]
+
 			elif test_case_name.startswith("args"):
 				test_case_name = test_case_name[4:]
 
@@ -589,27 +645,37 @@ def main():
 			if args.testcase:
 				stripped_target = strip_leading_zeros(args.testcase)
 				stripped_current = strip_leading_zeros(test_case_name)
+
 				if stripped_current != stripped_target:
 					continue
 
 
 			# TOTAL=$((TOTAL + 1))
 			total_tests += 1
+
 			# expected_output="$Q_OUTPUT_DIR/output${test_case_name}"
-			expected_output = os.path.join(q_output_dir, f"output{test_case_name}")
+			expected_output = os.path.join(
+				q_output_dir, 
+				f"output{test_case_name}"
+			)
+			
 			# # Might be a .txt or a directory
 			# if [ ! -e "$expected_output" ] && [ -e "${expected_output}.txt" ]; then
 			# 	expected_output="${expected_output}.txt"
 			# fi
-			if not os.path.exists(expected_output) and os.path.exists(expected_output + ".txt"):
+			if (
+				not os.path.exists(expected_output) 
+	   			and os.path.exists(expected_output + ".txt")
+			):
 				expected_output += ".txt"
 
 
-    		# sandbox_dir=$(mktemp -d -t sandbox_XXXXXX)
+			# sandbox_dir=$(mktemp -d -t sandbox_XXXXXX)
 			sandbox_dir = tempfile.mkdtemp(prefix="sandbox_")
+
 			try:
 				# # Evaluate
-    			# if [ -n "$EVALUATOR" ] && [ "$EVALUATOR" != "null" ]; then
+				# if [ -n "$EVALUATOR" ] && [ "$EVALUATOR" != "null" ]; then
 				if evaluator and evaluator != "null":
 
 
@@ -619,20 +685,35 @@ def main():
 					# if [ ! -x "$EVAL_SCRIPT" ]; then
 					# 	chmod +x "$EVAL_SCRIPT"
 					# fi
-					eval_script = os.path.abspath(os.path.join(os.path.dirname(args.config), evaluator))
+					eval_script = os.path.abspath(
+						os.path.join(
+							os.path.dirname(args.config), 
+							evaluator
+							)
+						)
 
-                    # TODO Python doesn't chmod. If evaluator exists but isn't executable grader can crash
+					# TODO Python doesn't chmod. If evaluator exists but isn't executable grader can crash
 					
 					# Pass EXECUTABLE, input_item, expected_output, sandbox_dir, timeout, sandbox_flag
 					# "$EVAL_SCRIPT" "$EXECUTABLE" "$input_item" "$expected_output" "$sandbox_dir" "$TIMEOUT_SEC" "$SANDBOX"
 					# exit_code=$?
-					run_args = [executable, input_item_path, expected_output, sandbox_dir, str(timeout_sec), str(args.sandbox).lower()]
+					run_args = [
+						executable, 
+						input_item_path, 
+						expected_output, 
+						sandbox_dir, 
+						str(timeout_sec), 
+						str(args.sandbox).lower()
+				 ]
+					
 					if os.name == 'nt' and eval_script.endswith('.sh'):
 						eval_cmd = ["bash", eval_script] + run_args
 					else:
 						eval_cmd = [eval_script] + run_args
 
-					res = subprocess.run(eval_cmd)
+					res = subprocess.run(
+						eval_cmd
+					)
 
 					# exit_code=$?
 					exit_code = res.returncode
@@ -643,10 +724,12 @@ def main():
 					# 	PASSED=$((PASSED + 1))
 					if exit_code == 0:
 						print(f"[VERDICT] {test_case_name}: PASSED")
+
 						passed_tests += 1
 
 
-                    # TODO Shell → TIMEOUT Python → WRONG_ANSWER
+
+					# TODO Shell → TIMEOUT Python → WRONG_ANSWER
 					# elif [ $exit_code -eq 124 ] || [ $exit_code -eq 2 ]; then
 					# 	echo "[VERDICT] $test_case_name: TIMEOUT"
 					elif exit_code == 2:
@@ -663,18 +746,31 @@ def main():
 					else:
 						print(f"[VERDICT] {test_case_name}: WRONG_ANSWER")
 
+
 				else:
 					# # Standard Evaluation
 					# run_standard "$input_item" "$expected_output" "$sandbox_dir" "$test_case_name"
-					rc = run_standard(executable, input_item_path, expected_output, sandbox_dir,
-						test_case_name, ext, timeout_sec, memory_cap_mb,
-						args.sandbox, args.testcases_dir, args.question)
+					rc = run_standard(
+						executable, 
+						input_item_path, 
+						expected_output, 
+						sandbox_dir,
+						test_case_name, 
+						ext, 
+						timeout_sec, 
+						memory_cap_mb,
+						args.sandbox, 
+						args.testcases_dir, 
+						args.question
+					)
+
 					# exit_code=$?
 					# if [ $exit_code -eq 0 ]; then
 					# 	PASSED=$((PASSED + 1))
 					# fi
 					if rc == 0:
 						passed_tests += 1
+
 
 				# if [ -n "$SAVE_OUTPUT_DIR" ]; then
 				# 	mkdir -p "$SAVE_OUTPUT_DIR"
@@ -683,18 +779,26 @@ def main():
 				if args.save_output_dir:
 					os.makedirs(args.save_output_dir, exist_ok=True)
 					src_stdout = os.path.join(sandbox_dir, "stdout.txt")
+
 					if os.path.isfile(src_stdout):
-						shutil.copy2(src_stdout, os.path.join(args.save_output_dir, f"{args.question}_output{test_case_name}.txt"))
+						shutil.copy2(
+							src_stdout, 
+							os.path.join(
+								args.save_output_dir, 
+								f"{args.question}_output{test_case_name}.txt"
+								)
+							)
+						
 			finally:
-    			# rm -rf "$sandbox_dir"
+				# rm -rf "$sandbox_dir"
 				shutil.rmtree(sandbox_dir, ignore_errors=True)
 
 		# echo "[SCORE] $PASSED/$TOTAL"
 		print(f"[SCORE] {passed_tests}/{total_tests}")
+
 
 	finally:
 		shutil.rmtree(build_dir, ignore_errors=True)
 
 if __name__ == "__main__":
 	main()
-

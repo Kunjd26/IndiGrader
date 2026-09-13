@@ -94,6 +94,18 @@ def strip_leading_zeros(s):
 
 def diff_files(actual_path, expected_path):
 	"""OS-independent line-by-line comparison ignoring trailing whitespace and blank lines."""
+	# TODO This MUST be changed for exact grading equivalence.
+	# This only:
+
+    #     removes leading whitespace
+    #     removes trailing whitespace
+    #     removes completely blank lines
+
+    # It does NOT:
+
+    #     ignore case
+    #     ignore internal whitespace
+
 	try:
 		with open(actual_path, 'r', encoding='utf-8', errors='ignore') as f1, \
 			 open(expected_path, 'r', encoding='utf-8', errors='ignore') as f2:
@@ -125,6 +137,9 @@ def run_standard(executable, input_item, expected_output, sandbox_dir, test_name
 	actual_output = os.path.join(sandbox_dir, "stdout.txt")
 	stderr_output = os.path.join(sandbox_dir, "stderr.txt")
 
+
+    # TODO Problamatic Python copytree() copy hidden files.
+	
 	# Global Static Injection
 	# if [ -d "$TESTCASES_DIR/$QUESTION/static" ]; then
     #     cp -r "$TESTCASES_DIR/$QUESTION/static/"* "$sandbox_dir/" 2>/dev/null || true
@@ -139,6 +154,8 @@ def run_standard(executable, input_item, expected_output, sandbox_dir, test_name
 			else:
 				shutil.copy2(s, d)
 
+
+    # TODO Problamatic Python copytree() copy hidden files.
 
 	# local stdin_file="/dev/null"
     # local args_file="/dev/null"
@@ -207,6 +224,11 @@ def run_standard(executable, input_item, expected_output, sandbox_dir, test_name
 	# Command array construction
     # local CMD=()
 	cmd = []
+
+    
+    # TODO Problamatic If Firejail isn't installed.Python Simply doesn't use Firejail.
+    # Requesting sandboxing and silently running unsandboxed is not ideal.
+	
 	# Firejail is Linux specific; skipped on Windows/Mac dynamically
 	# if [ "$SANDBOX" = true ]; then
     #     CMD=("firejail" "--quiet" "--noprofile" "--private=.")
@@ -259,6 +281,10 @@ def run_standard(executable, input_item, expected_output, sandbox_dir, test_name
 	exit_code = 0
 	timeout_occurred = False
 
+
+    # TODO Problamatic The Python implementation should inspect the current limit and 
+    #                   safely reduce it rather than blindly trying to increase the hard limit.
+
 	# Unix-only memory capping configuration
 	def set_limits():
 		if os.name == 'posix':
@@ -278,6 +304,9 @@ def run_standard(executable, input_item, expected_output, sandbox_dir, test_name
 			preexec_fn=set_limits if os.name == 'posix' else None
 		)
 		exit_code = proc.returncode
+
+    # TODO produce TIMEOUT process-tree behavior can differ.
+    
 	except subprocess.TimeoutExpired:
 		timeout_occurred = True
 	except Exception as e:
@@ -290,6 +319,10 @@ def run_standard(executable, input_item, expected_output, sandbox_dir, test_name
 		stdout_stream.close()
 		stderr_stream.close()
 		os.chdir(orig_cwd)
+
+
+    # TODO if /usr/bin/time isn't present, the shell leaves the execution time blank.
+    # Python always generates a time.
 
 	exec_time = round(time.time() - start_time, 2)
 
@@ -375,6 +408,8 @@ def main():
 				sys.exit(1)
 
 
+            # TODO Problamatic Python copytree() copy hidden files.
+			
 			# echo "[LOG] Compiling via Makefile in temporary sandbox..."
 			# cp -r "$SUBMISSION"/* "$BUILD_DIR/"
 			# if [ -d "${TESTCASES_DIR}/static" ]; then
@@ -519,10 +554,14 @@ def main():
 
 
 
+        # Python will attempt to grade Hidden file (eg; .input01) while shell won't.
+
 		input_items = sorted(os.listdir(q_input_dir))
 		# for input_item in "$Q_INPUT_DIR"/*; do
 		# 	[ -e "$input_item" ] || continue
 		for item in input_items:
+
+            # TODO This means Python performs only one prefix removal.
 
 			# test_case_name=$(basename "$input_item" | sed -e 's/^input//' -e 's/^args//')
 			input_item_path = os.path.join(q_input_dir, item)
@@ -582,6 +621,8 @@ def main():
 					# fi
 					eval_script = os.path.abspath(os.path.join(os.path.dirname(args.config), evaluator))
 
+                    # TODO Python doesn't chmod. If evaluator exists but isn't executable grader can crash
+					
 					# Pass EXECUTABLE, input_item, expected_output, sandbox_dir, timeout, sandbox_flag
 					# "$EVAL_SCRIPT" "$EXECUTABLE" "$input_item" "$expected_output" "$sandbox_dir" "$TIMEOUT_SEC" "$SANDBOX"
 					# exit_code=$?
@@ -604,6 +645,8 @@ def main():
 						print(f"[VERDICT] {test_case_name}: PASSED")
 						passed_tests += 1
 
+
+                    # TODO Shell → TIMEOUT Python → WRONG_ANSWER
 					# elif [ $exit_code -eq 124 ] || [ $exit_code -eq 2 ]; then
 					# 	echo "[VERDICT] $test_case_name: TIMEOUT"
 					elif exit_code == 2:
